@@ -1,2 +1,8 @@
 *.db
 .env
+.streamlit/secrets.toml
+venv/
+__pycache__/
+*.pyc
+migrate_to_supabase.py
+app.py.new

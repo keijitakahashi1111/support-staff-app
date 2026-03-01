@@ -1,15 +1,11 @@
-import sqlite3
 import datetime
 import pandas as pd
-from .models import DB_PATH
-
-def get_connection():
-    return sqlite3.connect(DB_PATH)
+from .db_config import get_connection
 
 def get_staff_list(office_id=None):
     conn = get_connection()
     if office_id:
-        df = pd.read_sql("SELECT * FROM staff WHERE office_id = ?", conn, params=[office_id])
+        df = pd.read_sql("SELECT * FROM staff WHERE office_id = %s", conn, params=[office_id])
     else:
         df = pd.read_sql("SELECT * FROM staff", conn)
     conn.close()
@@ -24,7 +20,7 @@ def get_user_candidates():
 def add_daily_report(staff_id, date, sentiment, content, learning):
     conn = get_connection()
     c = conn.cursor()
-    c.execute("INSERT INTO daily_reports (staff_id, date, sentiment_score, content, learning) VALUES (?, ?, ?, ?, ?)",
+    c.execute("INSERT INTO daily_reports (staff_id, date, sentiment_score, content, learning) VALUES (%s, %s, %s, %s, %s)",
               (staff_id, date, sentiment, content, learning))
     conn.commit()
     conn.close()
@@ -41,7 +37,7 @@ def get_daily_reports(staff_id=None):
 def add_user_candidate(name, source, status, staff_id, expected_revenue, note):
     conn = get_connection()
     c = conn.cursor()
-    c.execute("INSERT INTO user_candidates (name, source, status, staff_id, contact_date, expected_revenue, note) VALUES (?, ?, ?, ?, DATE('now'), ?, ?)",
+    c.execute("INSERT INTO user_candidates (name, source, status, staff_id, contact_date, expected_revenue, note) VALUES (%s, %s, %s, %s, CURRENT_DATE, %s, %s)",
               (name, source, status, staff_id, expected_revenue, note))
     conn.commit()
     conn.close()
@@ -50,7 +46,7 @@ def get_todays_attendance(staff_id):
     conn = get_connection()
     c = conn.cursor()
     today = datetime.date.today()
-    c.execute("SELECT * FROM attendance WHERE staff_id = ? AND date = ?", (staff_id, today))
+    c.execute("SELECT * FROM attendance WHERE staff_id = %s AND date = %s", (staff_id, today))
     row = c.fetchone()
     conn.close()
     if row:
@@ -68,24 +64,24 @@ def clock_action(staff_id, action):
     now = datetime.datetime.now()
     
     # Check if record exists
-    c.execute("SELECT id, status FROM attendance WHERE staff_id = ? AND date = ?", (staff_id, today))
+    c.execute("SELECT id, status FROM attendance WHERE staff_id = %s AND date = %s", (staff_id, today))
     row = c.fetchone()
     
     if action == "clock_in":
         if not row:
-            c.execute("INSERT INTO attendance (staff_id, date, clock_in, status) VALUES (?, ?, ?, 'working')", (staff_id, today, now))
+            c.execute("INSERT INTO attendance (staff_id, date, clock_in, status) VALUES (%s, %s, %s, 'working')", (staff_id, today, now))
     
     elif action == "clock_out":
         if row:
-            c.execute("UPDATE attendance SET clock_out = ?, status = 'finished' WHERE id = ?", (now, row[0]))
+            c.execute("UPDATE attendance SET clock_out = %s, status = 'finished' WHERE id = %s", (now, row[0]))
             
     elif action == "break_start":
         if row:
-            c.execute("UPDATE attendance SET break_start = ?, status = 'break' WHERE id = ?", (now, row[0]))
+            c.execute("UPDATE attendance SET break_start = %s, status = 'break' WHERE id = %s", (now, row[0]))
 
     elif action == "break_end":
         if row:
-            c.execute("UPDATE attendance SET break_end = ?, status = 'working' WHERE id = ?", (now, row[0]))
+            c.execute("UPDATE attendance SET break_end = %s, status = 'working' WHERE id = %s", (now, row[0]))
 
     conn.commit()
     conn.close()
@@ -103,10 +99,16 @@ def upsert_staff_details(staff_id, address, birthday, phone, bank_info, dependen
                           qualifications="", resume_file_path=None, notes=""):
     conn = get_connection()
     c = conn.cursor()
-    c.execute("""INSERT OR REPLACE INTO staff_details
+    c.execute("""INSERT INTO staff_details
         (staff_id, address, birthday, phone, bank_info, dependents_count,
          commuter_allowance, base_salary, qualifications, resume_file_path, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (staff_id) DO UPDATE SET
+         address = EXCLUDED.address, birthday = EXCLUDED.birthday, phone = EXCLUDED.phone,
+         bank_info = EXCLUDED.bank_info, dependents_count = EXCLUDED.dependents_count,
+         commuter_allowance = EXCLUDED.commuter_allowance, base_salary = EXCLUDED.base_salary,
+         qualifications = EXCLUDED.qualifications, resume_file_path = EXCLUDED.resume_file_path,
+         notes = EXCLUDED.notes""",
               (staff_id, address, birthday, phone, bank_info, dependents, transport, salary,
                qualifications, resume_file_path, notes))
     conn.commit()
@@ -121,7 +123,7 @@ def get_staff_details(staff_id):
 def add_labor_procedure(staff_id, category, item_name, due_date):
     conn = get_connection()
     c = conn.cursor()
-    c.execute("INSERT INTO labor_procedures (staff_id, category, item_name, status, due_date) VALUES (?, ?, ?, 'not_started', ?)",
+    c.execute("INSERT INTO labor_procedures (staff_id, category, item_name, status, due_date) VALUES (%s, %s, %s, 'not_started', %s)",
               (staff_id, category, item_name, due_date))
     conn.commit()
     conn.close()
@@ -135,9 +137,9 @@ def get_labor_procedures():
 def update_procedure_status(proc_id, status):
     conn = get_connection()
     c = conn.cursor()
-    c.execute("UPDATE labor_procedures SET status = ? WHERE id = ?", (status, proc_id))
+    c.execute("UPDATE labor_procedures SET status = %s WHERE id = %s", (status, proc_id))
     if status == 'completed':
-        c.execute("UPDATE labor_procedures SET completed_date = DATE('now') WHERE id = ?", (proc_id,))
+        c.execute("UPDATE labor_procedures SET completed_date = CURRENT_DATE WHERE id = %s", (proc_id,))
     conn.commit()
     conn.close()
 
@@ -149,7 +151,7 @@ def add_client(data_dict):
     conn = get_connection()
     c = conn.cursor()
     cols = ', '.join(data_dict.keys())
-    placeholders = ', '.join(['?'] * len(data_dict))
+    placeholders = ', '.join(['%s'] * len(data_dict))
     c.execute(f"INSERT INTO clients ({cols}) VALUES ({placeholders})", list(data_dict.values()))
     conn.commit()
     conn.close()
@@ -157,8 +159,8 @@ def add_client(data_dict):
 def update_client(client_id, data_dict):
     conn = get_connection()
     c = conn.cursor()
-    set_clause = ', '.join([f"{k} = ?" for k in data_dict.keys()])
-    c.execute(f"UPDATE clients SET {set_clause} WHERE id = ?", list(data_dict.values()) + [client_id])
+    set_clause = ', '.join([f"{k} = %s" for k in data_dict.keys()])
+    c.execute(f"UPDATE clients SET {set_clause} WHERE id = %s", list(data_dict.values()) + [client_id])
     conn.commit()
     conn.close()
 
@@ -166,10 +168,10 @@ def update_client(client_id, data_dict):
 
 def get_checklist_items(meeting_type, category=None):
     conn = get_connection()
-    query = "SELECT * FROM daily_checklist_master WHERE meeting_type = ?"
+    query = "SELECT * FROM daily_checklist_master WHERE meeting_type = %s"
     params = [meeting_type]
     if category:
-        query += " AND category = ?"
+        query += " AND category = %s"
         params.append(category)
     query += " ORDER BY sort_order"
     df = pd.read_sql(query, conn, params=params)
@@ -181,15 +183,15 @@ def save_checklist_log(date, checked_ids):
     conn = get_connection()
     c = conn.cursor()
     # Clear existing for date
-    c.execute("DELETE FROM daily_checklist_log WHERE date = ?", (date,))
+    c.execute("DELETE FROM daily_checklist_log WHERE date = %s", (date,))
     for master_id in checked_ids:
-        c.execute("INSERT INTO daily_checklist_log (date, checklist_master_id, checked) VALUES (?, ?, 1)", (date, master_id))
+        c.execute("INSERT INTO daily_checklist_log (date, checklist_master_id, checked) VALUES (%s, %s, 1)", (date, master_id))
     conn.commit()
     conn.close()
 
 def get_checklist_log(date):
     conn = get_connection()
-    df = pd.read_sql("SELECT checklist_master_id FROM daily_checklist_log WHERE date = ? AND checked = 1", conn, params=[date])
+    df = pd.read_sql("SELECT checklist_master_id FROM daily_checklist_log WHERE date = %s AND checked = 1", conn, params=[date])
     conn.close()
     return set(df['checklist_master_id'].tolist()) if not df.empty else set()
 
@@ -197,17 +199,17 @@ def save_meeting_notes(date, meeting_type, data_dict):
     conn = get_connection()
     c = conn.cursor()
     # Upsert
-    c.execute("DELETE FROM daily_meeting_notes WHERE date = ? AND meeting_type = ?", (date, meeting_type))
+    c.execute("DELETE FROM daily_meeting_notes WHERE date = %s AND meeting_type = %s", (date, meeting_type))
     cols = ['date', 'meeting_type'] + list(data_dict.keys())
     vals = [date, meeting_type] + list(data_dict.values())
-    placeholders = ', '.join(['?'] * len(vals))
+    placeholders = ', '.join(['%s'] * len(vals))
     c.execute(f"INSERT INTO daily_meeting_notes ({', '.join(cols)}) VALUES ({placeholders})", vals)
     conn.commit()
     conn.close()
 
 def get_meeting_notes(date, meeting_type):
     conn = get_connection()
-    df = pd.read_sql("SELECT * FROM daily_meeting_notes WHERE date = ? AND meeting_type = ?", conn, params=[date, meeting_type])
+    df = pd.read_sql("SELECT * FROM daily_meeting_notes WHERE date = %s AND meeting_type = %s", conn, params=[date, meeting_type])
     conn.close()
     return df.iloc[0] if not df.empty else None
 
@@ -220,7 +222,7 @@ def get_reward_rates():
 def add_weekly_interview(date, client_name, content, staff_name):
     conn = get_connection()
     c = conn.cursor()
-    c.execute("INSERT INTO weekly_interviews (date, client_name, content, staff_name, completed) VALUES (?, ?, ?, ?, 0)",
+    c.execute("INSERT INTO weekly_interviews (date, client_name, content, staff_name, completed) VALUES (%s, %s, %s, %s, 0)",
               (date, client_name, content, staff_name))
     conn.commit()
     conn.close()
@@ -230,7 +232,7 @@ def get_weekly_interviews(date=None):
     query = "SELECT * FROM weekly_interviews"
     params = []
     if date:
-        query += " WHERE date = ?"
+        query += " WHERE date = %s"
         params.append(date)
     query += " ORDER BY date DESC"
     df = pd.read_sql(query, conn, params=params)
@@ -250,7 +252,7 @@ def get_monthly_targets(year=None):
     query = "SELECT * FROM monthly_office_targets"
     params = []
     if year:
-        query += " WHERE year = ?"
+        query += " WHERE year = %s"
         params.append(year)
     query += " ORDER BY year, month, id"
     df = pd.read_sql(query, conn, params=params)
@@ -262,14 +264,14 @@ def get_monthly_targets(year=None):
 def post_channel_message(office_name, author_id, author_name, msg_type, content):
     conn = get_connection()
     c = conn.cursor()
-    c.execute("INSERT INTO channel_messages (office_name, author_id, author_name, msg_type, content) VALUES (?, ?, ?, ?, ?)",
+    c.execute("INSERT INTO channel_messages (office_name, author_id, author_name, msg_type, content) VALUES (%s, %s, %s, %s, %s)",
               (office_name, author_id, author_name, msg_type, content))
     conn.commit()
     conn.close()
 
 def get_channel_messages(office_name, limit=50):
     conn = get_connection()
-    df = pd.read_sql("SELECT * FROM channel_messages WHERE office_name = ? ORDER BY created_at DESC LIMIT ?",
+    df = pd.read_sql("SELECT * FROM channel_messages WHERE office_name = %s ORDER BY created_at DESC LIMIT %s",
                       conn, params=[office_name, limit])
     conn.close()
     return df
@@ -282,21 +284,21 @@ def save_roleplay_record(staff_id, staff_name, scenario, category, conversation,
     import json
     conv_json = json.dumps(conversation, ensure_ascii=False)
     c.execute("""INSERT INTO roleplay_records (staff_id, staff_name, scenario, category, conversation, ai_feedback, learning_notes)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                 VALUES (%s, %s, %s, %s, %s, %s, %s)""",
               (staff_id, staff_name, scenario, category, conv_json, ai_feedback, learning_notes))
     conn.commit()
     conn.close()
 
 def get_roleplay_records(staff_id):
     conn = get_connection()
-    df = pd.read_sql("SELECT * FROM roleplay_records WHERE staff_id = ? ORDER BY created_at DESC", conn, params=[staff_id])
+    df = pd.read_sql("SELECT * FROM roleplay_records WHERE staff_id = %s ORDER BY created_at DESC", conn, params=[staff_id])
     conn.close()
     return df
 
 def update_roleplay_application(record_id, application_notes):
     conn = get_connection()
     c = conn.cursor()
-    c.execute("UPDATE roleplay_records SET application_notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+    c.execute("UPDATE roleplay_records SET application_notes = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
               (application_notes, record_id))
     conn.commit()
     conn.close()
@@ -310,10 +312,10 @@ def save_oneonone_record(manager_id, manager_name, staff_id, staff_name, meeting
     c.execute("""INSERT INTO oneonone_records
                  (manager_id, manager_name, staff_id, staff_name, meeting_date, minutes, next_meeting_date,
                   meeting_type, client_id, client_name)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
               (manager_id, manager_name, staff_id, staff_name, meeting_date, minutes, next_date,
                meeting_type, client_id, client_name))
-    record_id = c.lastrowid
+    record_id = c.fetchone()[0]
     conn.commit()
     conn.close()
     return record_id
@@ -342,7 +344,7 @@ def get_oneonone_records(staff_id=None, manager_id=None, meeting_type=None):
 def add_oneonone_action(record_id, staff_id, action_text, due_date):
     conn = get_connection()
     c = conn.cursor()
-    c.execute("INSERT INTO oneonone_actions (record_id, staff_id, action_text, due_date) VALUES (?, ?, ?, ?)",
+    c.execute("INSERT INTO oneonone_actions (record_id, staff_id, action_text, due_date) VALUES (%s, %s, %s, %s)",
               (record_id, staff_id, action_text, due_date))
     conn.commit()
     conn.close()
@@ -352,10 +354,10 @@ def get_oneonone_actions(staff_id=None, record_id=None):
     query = "SELECT * FROM oneonone_actions"
     params = []
     if record_id:
-        query += " WHERE record_id = ?"
+        query += " WHERE record_id = %s"
         params.append(record_id)
     elif staff_id:
-        query += " WHERE staff_id = ?"
+        query += " WHERE staff_id = %s"
         params.append(staff_id)
     query += " ORDER BY created_at DESC"
     df = pd.read_sql(query, conn, params=params)
@@ -365,7 +367,7 @@ def get_oneonone_actions(staff_id=None, record_id=None):
 def complete_oneonone_action(action_id, notes):
     conn = get_connection()
     c = conn.cursor()
-    c.execute("UPDATE oneonone_actions SET status = 'done', completion_notes = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?",
+    c.execute("UPDATE oneonone_actions SET status = 'done', completion_notes = %s, completed_at = CURRENT_TIMESTAMP WHERE id = %s",
               (notes, action_id))
     conn.commit()
     conn.close()
@@ -380,10 +382,10 @@ def get_attendance_report(date_from=None, date_to=None, office_name=None):
                WHERE 1=1"""
     params = []
     if date_from:
-        query += " AND a.date >= ?"
+        query += " AND a.date >= %s"
         params.append(date_from)
     if date_to:
-        query += " AND a.date <= ?"
+        query += " AND a.date <= %s"
         params.append(date_to)
     query += " ORDER BY a.date DESC, s.name"
     df = pd.read_sql(query, conn, params=params)
@@ -400,10 +402,10 @@ def get_attendance_summary(date_from=None, date_to=None):
                LEFT JOIN attendance a ON s.id = a.staff_id"""
     params = []
     if date_from:
-        query += " AND a.date >= ?"
+        query += " AND a.date >= %s"
         params.append(date_from)
     if date_to:
-        query += " AND a.date <= ?"
+        query += " AND a.date <= %s"
         params.append(date_to)
     query += " GROUP BY s.id ORDER BY s.name"
     df = pd.read_sql(query, conn, params=params)
@@ -421,7 +423,7 @@ def add_client_daily_record(client_id, record_date, service_type, clock_in, cloc
                  (client_id, record_date, service_type, clock_in, clock_out,
                   pickup_flag, dropoff_flag, meal_flag, absence_contact,
                   absence_support, outside_support, memo, recorded_by)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
               (client_id, record_date, service_type, clock_in, clock_out,
                pickup, dropoff, meal, absence_contact, absence_support,
                outside_support, memo, recorded_by))
@@ -435,13 +437,13 @@ def get_client_daily_records(client_id=None, date_from=None, date_to=None):
                JOIN clients c ON r.client_id = c.id WHERE 1=1"""
     params = []
     if client_id:
-        query += " AND r.client_id = ?"
+        query += " AND r.client_id = %s"
         params.append(client_id)
     if date_from:
-        query += " AND r.record_date >= ?"
+        query += " AND r.record_date >= %s"
         params.append(date_from)
     if date_to:
-        query += " AND r.record_date <= ?"
+        query += " AND r.record_date <= %s"
         params.append(date_to)
     query += " ORDER BY r.record_date DESC, c.name"
     df = pd.read_sql(query, conn, params=params)
@@ -467,7 +469,7 @@ def get_monthly_usage_summary(year, month):
                       COALESCE(SUM(r.outside_support), 0) as outside_support_count
                FROM clients c
                LEFT JOIN client_daily_records r ON c.id = r.client_id
-                    AND r.record_date >= ? AND r.record_date < ?
+                    AND r.record_date >= %s AND r.record_date < %s
                WHERE c.usage_status = '利用者'
                GROUP BY c.id
                ORDER BY c.name"""
@@ -483,7 +485,7 @@ def add_support_record(client_id, record_date, service_type, content, condition,
     c = conn.cursor()
     c.execute("""INSERT INTO support_records
                  (client_id, record_date, service_type, support_content, client_condition, goal_progress, staff_id, staff_name)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
               (client_id, record_date, service_type, content, condition, goal, staff_id, staff_name))
     conn.commit()
     conn.close()
@@ -495,13 +497,13 @@ def get_support_records(client_id=None, date_from=None, date_to=None):
                JOIN clients c ON s.client_id = c.id WHERE 1=1"""
     params = []
     if client_id:
-        query += " AND s.client_id = ?"
+        query += " AND s.client_id = %s"
         params.append(client_id)
     if date_from:
-        query += " AND s.record_date >= ?"
+        query += " AND s.record_date >= %s"
         params.append(date_from)
     if date_to:
-        query += " AND s.record_date <= ?"
+        query += " AND s.record_date <= %s"
         params.append(date_to)
     query += " ORDER BY s.record_date DESC, c.name"
     df = pd.read_sql(query, conn, params=params)
@@ -515,7 +517,7 @@ def get_addition_settings(office_name=None):
     query = "SELECT * FROM addition_settings WHERE is_active = 1"
     params = []
     if office_name:
-        query += " AND office_name = ?"
+        query += " AND office_name = %s"
         params.append(office_name)
     df = pd.read_sql(query, conn, params=params)
     conn.close()
@@ -538,7 +540,7 @@ def seed_addition_defaults():
             ("全事業所", "就労定着支援体制加算", "6151", 0, "定着率70%以上"),
         ]
         for d in defaults:
-            c.execute("INSERT INTO addition_settings (office_name, addition_name, addition_code, unit_price, notes) VALUES (?, ?, ?, ?, ?)", d)
+            c.execute("INSERT INTO addition_settings (office_name, addition_name, addition_code, unit_price, notes) VALUES (%s, %s, %s, %s, %s)", d)
         conn.commit()
     conn.close()
 
@@ -579,7 +581,7 @@ def get_client_alerts():
         FROM client_daily_records r
         JOIN clients c ON r.client_id = c.id
         LEFT JOIN support_records s ON r.client_id = s.client_id AND r.record_date = s.record_date
-        WHERE s.id IS NULL AND r.record_date <= ? AND r.service_type = '通所'
+        WHERE s.id IS NULL AND r.record_date <= %s AND r.service_type = '通所'
         ORDER BY r.record_date DESC LIMIT 20
     """, conn, params=[str(yesterday)])
     for _, row in missing.iterrows():
@@ -687,7 +689,7 @@ def get_offices():
 
 def get_office(office_id):
     conn = get_connection()
-    df = pd.read_sql("SELECT * FROM offices WHERE id = ?", conn, params=[office_id])
+    df = pd.read_sql("SELECT * FROM offices WHERE id = %s", conn, params=[office_id])
     conn.close()
     return df.iloc[0] if not df.empty else None
 
@@ -706,7 +708,7 @@ def get_office_summary(year, month):
     FROM offices o
     LEFT JOIN clients c ON c.office_id = o.id
     LEFT JOIN client_daily_records r ON r.client_id = c.id
-         AND r.record_date >= ? AND r.record_date <= ?
+         AND r.record_date >= %s AND r.record_date <= %s
     WHERE o.is_active = 1
     GROUP BY o.id
     ORDER BY o.id
@@ -719,7 +721,7 @@ def get_office_summary(year, month):
 def get_clients(office_id=None):
     conn = get_connection()
     if office_id:
-        df = pd.read_sql("SELECT * FROM clients WHERE office_id = ? ORDER BY id", conn, params=[office_id])
+        df = pd.read_sql("SELECT * FROM clients WHERE office_id = %s ORDER BY id", conn, params=[office_id])
     else:
         df = pd.read_sql("SELECT * FROM clients ORDER BY id", conn)
     conn.close()
@@ -728,7 +730,7 @@ def get_clients(office_id=None):
 def get_user_candidates_by_office(office_id=None):
     conn = get_connection()
     if office_id:
-        df = pd.read_sql("SELECT * FROM user_candidates WHERE office_id = ? ORDER BY id DESC", conn, params=[office_id])
+        df = pd.read_sql("SELECT * FROM user_candidates WHERE office_id = %s ORDER BY id DESC", conn, params=[office_id])
     else:
         df = pd.read_sql("SELECT * FROM user_candidates ORDER BY id DESC", conn)
     conn.close()
@@ -746,7 +748,7 @@ def add_admin_interaction(office_id, interaction_date, category, counterpart_org
     c.execute("""INSERT INTO admin_interactions
         (office_id, interaction_date, category, counterpart_org, counterpart_person,
          channel, summary, audio_file_path, next_action, next_action_date, staff_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
         (office_id, interaction_date, category, counterpart_org, counterpart_person,
          channel, summary, audio_file_path, next_action, next_action_date, staff_id))
     conn.commit()
@@ -761,10 +763,10 @@ def get_admin_interactions(office_id=None, category=None, limit=50):
                WHERE 1=1"""
     params = []
     if office_id:
-        query += " AND ai.office_id = ?"
+        query += " AND ai.office_id = %s"
         params.append(office_id)
     if category:
-        query += " AND ai.category = ?"
+        query += " AND ai.category = %s"
         params.append(category)
     query += f" ORDER BY ai.interaction_date DESC LIMIT {limit}"
     df = pd.read_sql(query, conn, params=params)
@@ -774,7 +776,7 @@ def get_admin_interactions(office_id=None, category=None, limit=50):
 def update_admin_interaction_status(interaction_id, status):
     conn = get_connection()
     c = conn.cursor()
-    c.execute("UPDATE admin_interactions SET status = ? WHERE id = ?", (status, interaction_id))
+    c.execute("UPDATE admin_interactions SET status = %s WHERE id = %s", (status, interaction_id))
     conn.commit()
     conn.close()
 
@@ -788,18 +790,18 @@ def get_threads(office_id, limit=50):
         (SELECT COUNT(*) FROM thread_posts WHERE thread_id = t.id) as post_count
         FROM office_threads t
         LEFT JOIN staff s ON t.created_by = s.id
-        WHERE t.office_id = ?
+        WHERE t.office_id = %s
         ORDER BY t.pinned DESC, t.created_at DESC
-        LIMIT ?""", conn, params=[office_id, limit])
+        LIMIT %s""", conn, params=[office_id, limit])
     conn.close()
     return df
 
 def create_thread(office_id, title, created_by, thread_type='general'):
     conn = get_connection()
     c = conn.cursor()
-    c.execute("INSERT INTO office_threads (office_id, title, created_by, thread_type) VALUES (?,?,?,?)",
+    c.execute("INSERT INTO office_threads (office_id, title, created_by, thread_type) VALUES (%s,%s,%s,%s) RETURNING id",
               (office_id, title, created_by, thread_type))
-    thread_id = c.lastrowid
+    thread_id = c.fetchone()[0]
     conn.commit()
     conn.close()
     return thread_id
@@ -809,7 +811,7 @@ def get_thread_posts(thread_id):
     df = pd.read_sql("""SELECT p.*, s.name as author_name
         FROM thread_posts p
         LEFT JOIN staff s ON p.author_id = s.id
-        WHERE p.thread_id = ?
+        WHERE p.thread_id = %s
         ORDER BY p.created_at ASC""", conn, params=[thread_id])
     conn.close()
     return df
@@ -817,7 +819,7 @@ def get_thread_posts(thread_id):
 def add_thread_post(thread_id, author_id, content):
     conn = get_connection()
     c = conn.cursor()
-    c.execute("INSERT INTO thread_posts (thread_id, author_id, content) VALUES (?,?,?)",
+    c.execute("INSERT INTO thread_posts (thread_id, author_id, content) VALUES (%s,%s,%s)",
               (thread_id, author_id, content))
     conn.commit()
     conn.close()
@@ -825,7 +827,7 @@ def add_thread_post(thread_id, author_id, content):
 def toggle_thread_pin(thread_id):
     conn = get_connection()
     c = conn.cursor()
-    c.execute("UPDATE office_threads SET pinned = CASE WHEN pinned = 1 THEN 0 ELSE 1 END WHERE id = ?", (thread_id,))
+    c.execute("UPDATE office_threads SET pinned = CASE WHEN pinned = 1 THEN 0 ELSE 1 END WHERE id = %s", (thread_id,))
     conn.commit()
     conn.close()
 
@@ -835,13 +837,13 @@ def toggle_thread_pin(thread_id):
 
 def get_class_schedule(office_id, start_date=None, end_date=None):
     conn = get_connection()
-    query = "SELECT * FROM class_schedule WHERE office_id = ?"
+    query = "SELECT * FROM class_schedule WHERE office_id = %s"
     params = [office_id]
     if start_date:
-        query += " AND date >= ?"
+        query += " AND date >= %s"
         params.append(str(start_date))
     if end_date:
-        query += " AND date <= ?"
+        query += " AND date <= %s"
         params.append(str(end_date))
     query += " ORDER BY date, start_time"
     df = pd.read_sql(query, conn, params=params)
@@ -852,7 +854,7 @@ def add_class_schedule(office_id, date, start_time, end_time, title, description
     conn = get_connection()
     c = conn.cursor()
     c.execute("""INSERT INTO class_schedule (office_id, date, start_time, end_time, title, description, instructor)
-        VALUES (?,?,?,?,?,?,?)""", (office_id, date, start_time, end_time, title, description, instructor))
+        VALUES (%s,%s,%s,%s,%s,%s,%s)""", (office_id, date, start_time, end_time, title, description, instructor))
     conn.commit()
     conn.close()
 
@@ -862,7 +864,7 @@ def add_class_schedule(office_id, date, start_time, end_time, title, description
 
 def get_client_learning_log(client_id, limit=50):
     conn = get_connection()
-    df = pd.read_sql("SELECT * FROM client_learning_log WHERE client_id = ? ORDER BY date DESC LIMIT ?",
+    df = pd.read_sql("SELECT * FROM client_learning_log WHERE client_id = %s ORDER BY date DESC LIMIT %s",
                      conn, params=[client_id, limit])
     conn.close()
     return df
@@ -870,7 +872,7 @@ def get_client_learning_log(client_id, limit=50):
 def add_client_learning_log(client_id, date, category, title, content):
     conn = get_connection()
     c = conn.cursor()
-    c.execute("INSERT INTO client_learning_log (client_id, date, category, title, content) VALUES (?,?,?,?,?)",
+    c.execute("INSERT INTO client_learning_log (client_id, date, category, title, content) VALUES (%s,%s,%s,%s,%s)",
               (client_id, date, category, title, content))
     conn.commit()
     conn.close()
@@ -881,7 +883,7 @@ def add_client_learning_log(client_id, date, category, title, content):
 
 def get_client_health_checkins(client_id, limit=30):
     conn = get_connection()
-    df = pd.read_sql("SELECT * FROM client_health_checkin WHERE client_id = ? ORDER BY date DESC LIMIT ?",
+    df = pd.read_sql("SELECT * FROM client_health_checkin WHERE client_id = %s ORDER BY date DESC LIMIT %s",
                      conn, params=[client_id, limit])
     conn.close()
     return df
@@ -890,14 +892,14 @@ def add_client_health_checkin(client_id, date, sleep_hours, condition_score, mea
     conn = get_connection()
     c = conn.cursor()
     c.execute("""INSERT INTO client_health_checkin (client_id, date, sleep_hours, condition_score, meal_record, exercise_record, notes)
-        VALUES (?,?,?,?,?,?,?)""", (client_id, date, sleep_hours, condition_score, meal_record, exercise_record, notes))
+        VALUES (%s,%s,%s,%s,%s,%s,%s)""", (client_id, date, sleep_hours, condition_score, meal_record, exercise_record, notes))
     conn.commit()
     conn.close()
 
 def get_todays_health_checkin(client_id):
     conn = get_connection()
     today = datetime.date.today().isoformat()
-    df = pd.read_sql("SELECT * FROM client_health_checkin WHERE client_id = ? AND date = ?",
+    df = pd.read_sql("SELECT * FROM client_health_checkin WHERE client_id = %s AND date = %s",
                      conn, params=[client_id, today])
     conn.close()
     return df.iloc[0] if not df.empty else None
@@ -908,7 +910,7 @@ def get_todays_health_checkin(client_id):
 
 def get_client_by_id(client_id):
     conn = get_connection()
-    df = pd.read_sql("SELECT * FROM clients WHERE id = ?", conn, params=[int(client_id)])
+    df = pd.read_sql("SELECT * FROM clients WHERE id = %s", conn, params=[int(client_id)])
     conn.close()
     return df.iloc[0] if not df.empty else None
 
@@ -917,7 +919,7 @@ def get_clients_for_login(office_id=None):
     query = "SELECT id, name, office_id FROM clients WHERE usage_status = '利用者'"
     params = []
     if office_id:
-        query += " AND office_id = ?"
+        query += " AND office_id = %s"
         params.append(office_id)
     query += " ORDER BY name"
     df = pd.read_sql(query, conn, params=params)
@@ -927,19 +929,19 @@ def get_clients_for_login(office_id=None):
 def update_client_graduation_step(client_id, step):
     conn = get_connection()
     c = conn.cursor()
-    c.execute("UPDATE clients SET graduation_step = ? WHERE id = ?", (step, client_id))
+    c.execute("UPDATE clients SET graduation_step = %s WHERE id = %s", (step, client_id))
     conn.commit()
     conn.close()
 
 def get_client_oneonone_records(client_id, limit=20):
     """Get 1on1 records for a client (by matching client name in weekly_interviews)."""
     conn = get_connection()
-    client = pd.read_sql("SELECT name FROM clients WHERE id = ?", conn, params=[client_id])
+    client = pd.read_sql("SELECT name FROM clients WHERE id = %s", conn, params=[client_id])
     if client.empty:
         conn.close()
         return pd.DataFrame()
     name = client.iloc[0]['name']
-    df = pd.read_sql("SELECT * FROM weekly_interviews WHERE client_name = ? ORDER BY date DESC LIMIT ?",
+    df = pd.read_sql("SELECT * FROM weekly_interviews WHERE client_name = %s ORDER BY date DESC LIMIT %s",
                      conn, params=[name, limit])
     conn.close()
     return df
@@ -952,10 +954,10 @@ def get_todays_expected_clients(office_id=None):
         cdr.clock_in, cdr.clock_out, cdr.service_type
         FROM client_daily_records cdr
         JOIN clients c ON cdr.client_id = c.id
-        WHERE cdr.record_date = ?"""
+        WHERE cdr.record_date = %s"""
     params = [today]
     if office_id:
-        query += " AND cdr.office_id = ?"
+        query += " AND cdr.office_id = %s"
         params.append(office_id)
     df = pd.read_sql(query, conn, params=params)
     conn.close()
@@ -976,7 +978,7 @@ def save_hq_question(staff_id, staff_name, office_id, question, ai_answer,
     c.execute("""INSERT INTO hq_questions
                  (staff_id, staff_name, office_id, question, ai_answer,
                   is_escalated, escalation_category)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                 VALUES (%s, %s, %s, %s, %s, %s, %s)""",
               (staff_id, staff_name, office_id, question, ai_answer,
                1 if is_escalated else 0, escalation_category))
     conn.commit()
@@ -1015,7 +1017,7 @@ def add_support_plan(client_id, office_id, plan_date, review_date,
                  (client_id, office_id, plan_date, review_date,
                   long_term_goal, short_term_goal, support_content,
                   staff_id, staff_name, status)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
               (client_id, office_id, plan_date, review_date,
                long_term_goal, short_term_goal, support_content,
                staff_id, staff_name, status))
@@ -1029,13 +1031,13 @@ def get_support_plans(client_id=None, office_id=None, status=None):
                JOIN clients c ON sp.client_id = c.id WHERE 1=1"""
     params = []
     if client_id:
-        query += " AND sp.client_id = ?"
+        query += " AND sp.client_id = %s"
         params.append(client_id)
     if office_id:
-        query += " AND sp.office_id = ?"
+        query += " AND sp.office_id = %s"
         params.append(office_id)
     if status:
-        query += " AND sp.status = ?"
+        query += " AND sp.status = %s"
         params.append(status)
     query += " ORDER BY sp.plan_date DESC"
     df = pd.read_sql(query, conn, params=params)
@@ -1045,7 +1047,7 @@ def get_support_plans(client_id=None, office_id=None, status=None):
 def update_support_plan_status(plan_id, status):
     conn = get_connection()
     c = conn.cursor()
-    c.execute("UPDATE individual_support_plans SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+    c.execute("UPDATE individual_support_plans SET status = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
               (status, plan_id))
     conn.commit()
     conn.close()
@@ -1066,7 +1068,7 @@ def add_monitoring_record(client_id, plan_id, office_id, monitoring_date,
                   goal_achievement, support_evaluation, client_satisfaction,
                   needs_plan_change, change_reason, next_monitoring_date,
                   staff_id, staff_name)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
               (client_id, plan_id, office_id, monitoring_date,
                goal_achievement, support_evaluation, client_satisfaction,
                int(needs_plan_change), change_reason, next_monitoring_date,
@@ -1081,10 +1083,10 @@ def get_monitoring_records(client_id=None, office_id=None):
                JOIN clients c ON mr.client_id = c.id WHERE 1=1"""
     params = []
     if client_id:
-        query += " AND mr.client_id = ?"
+        query += " AND mr.client_id = %s"
         params.append(client_id)
     if office_id:
-        query += " AND mr.office_id = ?"
+        query += " AND mr.office_id = %s"
         params.append(office_id)
     query += " ORDER BY mr.monitoring_date DESC"
     df = pd.read_sql(query, conn, params=params)
@@ -1107,7 +1109,7 @@ def add_assessment_record(client_id, office_id, assessment_date, assessment_type
                   living_situation, health_condition, disability_characteristics,
                   work_experience, strengths, challenges, support_needs,
                   employment_goal, staff_id, staff_name)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
               (client_id, office_id, assessment_date, assessment_type,
                living_situation, health_condition, disability_characteristics,
                work_experience, strengths, challenges, support_needs,
@@ -1122,10 +1124,10 @@ def get_assessment_records(client_id=None, office_id=None):
                JOIN clients c ON ar.client_id = c.id WHERE 1=1"""
     params = []
     if client_id:
-        query += " AND ar.client_id = ?"
+        query += " AND ar.client_id = %s"
         params.append(client_id)
     if office_id:
-        query += " AND ar.office_id = ?"
+        query += " AND ar.office_id = %s"
         params.append(office_id)
     query += " ORDER BY ar.assessment_date DESC"
     df = pd.read_sql(query, conn, params=params)
@@ -1144,7 +1146,7 @@ def add_deduction_item(client_id, office_id, year, month, deduction_type,
     c.execute("""INSERT INTO deduction_items
                  (client_id, office_id, year, month, deduction_type,
                   deduction_reason, deduction_units, staff_id, notes)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
               (client_id, office_id, year, month, deduction_type,
                deduction_reason, deduction_units, staff_id, notes))
     conn.commit()
@@ -1157,13 +1159,13 @@ def get_deduction_items(office_id=None, year=None, month=None):
                LEFT JOIN clients c ON di.client_id = c.id WHERE 1=1"""
     params = []
     if office_id:
-        query += " AND di.office_id = ?"
+        query += " AND di.office_id = %s"
         params.append(office_id)
     if year:
-        query += " AND di.year = ?"
+        query += " AND di.year = %s"
         params.append(year)
     if month:
-        query += " AND di.month = ?"
+        query += " AND di.month = %s"
         params.append(month)
     query += " ORDER BY di.created_at DESC"
     df = pd.read_sql(query, conn, params=params)
@@ -1183,7 +1185,7 @@ def add_emergency_contact(person_type, person_id, person_name, relationship,
     c.execute("""INSERT INTO emergency_contacts
                  (person_type, person_id, person_name, relationship,
                   phone_primary, phone_secondary, email, address, notes, office_id)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
               (person_type, person_id, person_name, relationship,
                phone_primary, phone_secondary, email, address, notes, office_id))
     conn.commit()
@@ -1194,10 +1196,10 @@ def get_emergency_contacts(person_type=None, office_id=None):
     query = "SELECT * FROM emergency_contacts WHERE 1=1"
     params = []
     if person_type:
-        query += " AND person_type = ?"
+        query += " AND person_type = %s"
         params.append(person_type)
     if office_id:
-        query += " AND office_id = ?"
+        query += " AND office_id = %s"
         params.append(office_id)
     query += " ORDER BY person_type, person_name"
     df = pd.read_sql(query, conn, params=params)
@@ -1210,17 +1212,17 @@ def update_emergency_contact(contact_id, **kwargs):
     set_clauses = []
     params = []
     for key, val in kwargs.items():
-        set_clauses.append(f"{key} = ?")
+        set_clauses.append(f"{key} = %s")
         params.append(val)
     params.append(contact_id)
-    c.execute(f"UPDATE emergency_contacts SET {', '.join(set_clauses)} WHERE id = ?", params)
+    c.execute(f"UPDATE emergency_contacts SET {', '.join(set_clauses)} WHERE id = %s", params)
     conn.commit()
     conn.close()
 
 def delete_emergency_contact(contact_id):
     conn = get_connection()
     c = conn.cursor()
-    c.execute("DELETE FROM emergency_contacts WHERE id = ?", (contact_id,))
+    c.execute("DELETE FROM emergency_contacts WHERE id = %s", (contact_id,))
     conn.commit()
     conn.close()
 
@@ -1234,13 +1236,13 @@ def get_office_financials(year=None, month=None, office_name=None):
     query = "SELECT * FROM office_financials WHERE 1=1"
     params = []
     if year:
-        query += " AND year = ?"
+        query += " AND year = %s"
         params.append(year)
     if month:
-        query += " AND month = ?"
+        query += " AND month = %s"
         params.append(month)
     if office_name:
-        query += " AND office_name = ?"
+        query += " AND office_name = %s"
         params.append(office_name)
     query += " ORDER BY office_name, year, month"
     df = pd.read_sql(query, conn, params=params)
@@ -1253,7 +1255,7 @@ def add_office_financial(office_name, year, month, revenue, revenue_target, sga,
     c = conn.cursor()
     c.execute("""INSERT INTO office_financials 
         (office_name, year, month, revenue, revenue_target, sga, sga_target, profit, profit_target, new_users, new_users_target)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
         (office_name, year, month, revenue, revenue_target, sga, sga_target, profit, profit_target, new_users, new_users_target))
     conn.commit()
     conn.close()
@@ -1268,9 +1270,9 @@ def get_thread_posts(office_id=None, limit=50):
     query = "SELECT * FROM thread_posts WHERE 1=1"
     params = []
     if office_id:
-        query += " AND office_id = ?"
+        query += " AND office_id = %s"
         params.append(office_id)
-    query += " ORDER BY created_at DESC LIMIT ?"
+    query += " ORDER BY created_at DESC LIMIT %s"
     params.append(limit)
     df = pd.read_sql(query, conn, params=params)
     conn.close()
@@ -1280,15 +1282,15 @@ def add_thread_post(office_id, author_id, author_name, content, image_path=None)
     conn = get_connection()
     c = conn.cursor()
     c.execute("""INSERT INTO thread_posts (office_id, author_id, author_name, content, image_path)
-        VALUES (?, ?, ?, ?, ?)""", (office_id, author_id, author_name, content, image_path))
-    post_id = c.lastrowid
+        VALUES (%s, %s, %s, %s, %s) RETURNING id""", (office_id, author_id, author_name, content, image_path))
+    post_id = c.fetchone()[0]
     conn.commit()
     conn.close()
     return post_id
 
 def get_thread_comments(post_id):
     conn = get_connection()
-    df = pd.read_sql("SELECT * FROM thread_comments WHERE post_id = ? ORDER BY created_at ASC",
+    df = pd.read_sql("SELECT * FROM thread_comments WHERE post_id = %s ORDER BY created_at ASC",
                       conn, params=[post_id])
     conn.close()
     return df
@@ -1297,7 +1299,7 @@ def add_thread_comment(post_id, author_id, author_name, content):
     conn = get_connection()
     c = conn.cursor()
     c.execute("""INSERT INTO thread_comments (post_id, author_id, author_name, content)
-        VALUES (?, ?, ?, ?)""", (post_id, author_id, author_name, content))
+        VALUES (%s, %s, %s, %s)""", (post_id, author_id, author_name, content))
     conn.commit()
     conn.close()
 
@@ -1305,16 +1307,16 @@ def toggle_thread_like(post_id, user_id, user_name):
     conn = get_connection()
     c = conn.cursor()
     # Check if already liked
-    c.execute("SELECT id FROM thread_likes WHERE post_id = ? AND user_id = ?", (post_id, user_id))
+    c.execute("SELECT id FROM thread_likes WHERE post_id = %s AND user_id = %s", (post_id, user_id))
     existing = c.fetchone()
     if existing:
-        c.execute("DELETE FROM thread_likes WHERE id = ?", (existing[0],))
-        c.execute("UPDATE thread_posts SET likes_count = likes_count - 1 WHERE id = ?", (post_id,))
+        c.execute("DELETE FROM thread_likes WHERE id = %s", (existing[0],))
+        c.execute("UPDATE thread_posts SET likes_count = likes_count - 1 WHERE id = %s", (post_id,))
         liked = False
     else:
-        c.execute("INSERT INTO thread_likes (post_id, user_id, user_name) VALUES (?, ?, ?)",
+        c.execute("INSERT INTO thread_likes (post_id, user_id, user_name) VALUES (%s, %s, %s)",
                   (post_id, user_id, user_name))
-        c.execute("UPDATE thread_posts SET likes_count = likes_count + 1 WHERE id = ?", (post_id,))
+        c.execute("UPDATE thread_posts SET likes_count = likes_count + 1 WHERE id = %s", (post_id,))
         liked = True
     conn.commit()
     conn.close()
@@ -1322,6 +1324,6 @@ def toggle_thread_like(post_id, user_id, user_name):
 
 def get_thread_likes(post_id):
     conn = get_connection()
-    df = pd.read_sql("SELECT * FROM thread_likes WHERE post_id = ?", conn, params=[post_id])
+    df = pd.read_sql("SELECT * FROM thread_likes WHERE post_id = %s", conn, params=[post_id])
     conn.close()
     return df
