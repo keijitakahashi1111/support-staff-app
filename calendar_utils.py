@@ -8,7 +8,7 @@ try:
     from google_auth_oauthlib.flow import InstalledAppFlow
     from googleapiclient.discovery import build
     CALENDAR_AVAILABLE = True
-except ImportError:
+except Exception:
     CALENDAR_AVAILABLE = False
 
 # If modifying these scopes, delete the file token.json.

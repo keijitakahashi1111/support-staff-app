@@ -17,9 +17,18 @@ import streamlit_authenticator as stauth
 from pathlib import Path
 
 # Import modules (flat directory structure)
-import db_utils
-import calendar_utils
-import whisper_utils
+try:
+    import db_utils
+except Exception as e:
+    raise ImportError(f"Failed to import db_utils: {e}")
+try:
+    import calendar_utils
+except Exception:
+    calendar_utils = None
+try:
+    import whisper_utils
+except Exception:
+    whisper_utils = None
 import scenarios as rp_scenarios
 import company_rules
 import notebooklm_helper
@@ -27,7 +36,6 @@ import models
 
 # Initialize database (creates tables + demo data if not exists)
 models.init_db()
-models.seed_data()
 
 # Page Config
 st.set_page_config(page_title="支援員成長プラットフォーム", layout="wide")
