@@ -2,8 +2,6 @@
 Database configuration for Supabase PostgreSQL.
 """
 import os
-import psycopg2
-import psycopg2.extras
 
 # Default Supabase connection URL
 DEFAULT_DATABASE_URL = (
@@ -33,6 +31,7 @@ def get_database_url():
 
 def get_connection():
     """Return a psycopg2 connection to Supabase PostgreSQL."""
+    import psycopg2
     url = get_database_url()
     conn = psycopg2.connect(url)
     conn.autocommit = False
