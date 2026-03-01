@@ -1,0 +1,21 @@
+cookie:
+  expiry_days: 30
+  key: support_platform_auth_key_2025
+  name: support_platform_cookie
+credentials:
+  usernames:
+    admin_sato:
+      email: sato@nihon-shuro.co.jp
+      name: 佐藤 マネージャー
+      office_id: null
+      password: $2b$12$4YRnzspbJ6dagvhzodFTYubpRVH9N.yEpr4DhHQ6Tq/.uKVBFSyKC
+      role: hq
+    takahashi:
+      email: takahashi@nihon-shuro.co.jp
+      name: 高橋 支援員
+      office_id: 1
+      password: $2b$12$wfEMJe83qCVRpn61EzHZ4ecxtOcAlkIE7cpy1qSyzXlFqM4Ya7NrO
+      role: staff
+pre-authorized:
+  emails:
+  - '@nihon-shuro.co.jp'
