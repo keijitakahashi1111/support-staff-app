@@ -34,12 +34,14 @@ import company_rules
 import notebooklm_helper
 import models
 
-# Page Config (must be first Streamlit command)
+print("[app.py] Page config...", flush=True)
 st.set_page_config(page_title="支援員成長プラットフォーム", layout="wide")
 
 # Initialize database (creates tables + demo data if not exists)
+print("[app.py] Starting init_db...", flush=True)
 try:
     models.init_db()
+    print("[app.py] init_db completed!", flush=True)
 except Exception as e:
     import traceback
     st.error(f"❌ データベース接続エラー: {e}")

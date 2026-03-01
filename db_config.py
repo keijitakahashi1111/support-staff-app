@@ -33,6 +33,8 @@ def get_connection():
     """Return a psycopg2 connection to Supabase PostgreSQL."""
     import psycopg2
     url = get_database_url()
-    conn = psycopg2.connect(url)
+    print(f"[db_config] Connecting to database...", flush=True)
+    conn = psycopg2.connect(url, connect_timeout=10)
     conn.autocommit = False
+    print(f"[db_config] Connected successfully!", flush=True)
     return conn
