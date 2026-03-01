@@ -16,13 +16,14 @@ import yaml
 import streamlit_authenticator as stauth
 from pathlib import Path
 
-# Add path for imports
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from support_staff_app import db_utils, calendar_utils, whisper_utils
-from support_staff_app import scenarios as rp_scenarios
-from support_staff_app import company_rules
-from support_staff_app import notebooklm_helper
-from support_staff_app import models
+# Import modules (flat directory structure)
+import db_utils
+import calendar_utils
+import whisper_utils
+import scenarios as rp_scenarios
+import company_rules
+import notebooklm_helper
+import models
 
 # Initialize database (creates tables + demo data if not exists)
 models.init_db()

@@ -1,6 +1,6 @@
 import datetime
 import pandas as pd
-from .db_config import get_connection
+from db_config import get_connection
 
 def get_staff_list(office_id=None):
     conn = get_connection()

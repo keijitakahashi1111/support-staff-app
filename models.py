@@ -4,7 +4,7 @@ Tables are created during migration; init_db verifies/seeds only.
 """
 import datetime
 import os
-from .db_config import get_connection
+from db_config import get_connection
 
 
 def init_db():
