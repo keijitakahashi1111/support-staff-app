@@ -12,9 +12,8 @@ def get_database_url():
     # 1. Try Streamlit secrets first (for Streamlit Cloud)
     try:
         import streamlit as st
-        url = st.secrets.get("DATABASE_URL", "")
-        if url:
-            return url
+        if hasattr(st, "secrets") and "DATABASE_URL" in st.secrets:
+            return st.secrets["DATABASE_URL"]
     except Exception:
         pass
 
@@ -30,6 +29,6 @@ def get_connection():
             "DATABASE_URL is not set. "
             "Set it as a Streamlit secret or environment variable."
         )
-    conn = psycopg2.connect(url, sslmode="require")
+    conn = psycopg2.connect(url)
     conn.autocommit = False
     return conn
