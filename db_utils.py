@@ -326,13 +326,13 @@ def get_oneonone_records(staff_id=None, manager_id=None, meeting_type=None):
     params = []
     conditions = []
     if staff_id:
-        conditions.append("staff_id = ?")
+        conditions.append("staff_id = %s")
         params.append(staff_id)
     if manager_id:
-        conditions.append("manager_id = ?")
+        conditions.append("manager_id = %s")
         params.append(manager_id)
     if meeting_type:
-        conditions.append("meeting_type = ?")
+        conditions.append("meeting_type = %s")
         params.append(meeting_type)
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
@@ -992,7 +992,7 @@ def get_hq_questions(staff_id=None, escalated_only=False):
     params = []
     conditions = []
     if staff_id:
-        conditions.append("staff_id = ?")
+        conditions.append("staff_id = %s")
         params.append(staff_id)
     if escalated_only:
         conditions.append("is_escalated = 1")

@@ -34,11 +34,17 @@ import company_rules
 import notebooklm_helper
 import models
 
-# Initialize database (creates tables + demo data if not exists)
-models.init_db()
-
-# Page Config
+# Page Config (must be first Streamlit command)
 st.set_page_config(page_title="支援員成長プラットフォーム", layout="wide")
+
+# Initialize database (creates tables + demo data if not exists)
+try:
+    models.init_db()
+except Exception as e:
+    import traceback
+    st.error(f"❌ データベース接続エラー: {e}")
+    st.code(traceback.format_exc())
+    st.stop()
 
 # --- Authentication ---
 def check_password():

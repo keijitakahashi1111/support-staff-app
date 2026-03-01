@@ -9,24 +9,33 @@ from db_config import get_connection
 
 def init_db():
     """Ensure tables exist and seed initial data if needed."""
-    conn = get_connection()
-    c = conn.cursor()
+    import sys
+    try:
+        conn = get_connection()
+        c = conn.cursor()
 
-    # Verify connection by checking if staff table exists
-    c.execute("""
-        SELECT EXISTS (
-            SELECT FROM information_schema.tables 
-            WHERE table_schema = 'public' AND table_name = 'staff'
-        )
-    """)
-    if not c.fetchone()[0]:
-        raise RuntimeError("Database tables not found. Please run migrate_to_supabase.py first.")
+        # Verify connection by checking if staff table exists
+        c.execute("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = 'public' AND table_name = 'staff'
+            )
+        """)
+        if not c.fetchone()[0]:
+            print("WARNING: Database tables not found. Please run migrate_to_supabase.py first.", file=sys.stderr)
+            conn.close()
+            return
 
-    conn.commit()
-    conn.close()
-    
-    # Seed data if needed
-    seed_data()
+        conn.commit()
+        conn.close()
+        
+        # Seed data if needed
+        seed_data()
+    except Exception as e:
+        print(f"ERROR in init_db: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        raise
 
 
 def seed_data():
