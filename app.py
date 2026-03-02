@@ -80,6 +80,25 @@ def check_password():
         st.session_state["user_name"] = st.session_state.get("name", username)
         st.session_state["login_role"] = user_data.get("role", "staff")
         
+        # Build user_info dict for the main entry block
+        user_info = {
+            "id": user_data.get("staff_id", None),
+            "name": st.session_state["user_name"],
+            "role": st.session_state["login_role"],
+            "office_id": user_data.get("office_id"),
+            "username": username,
+        }
+        # Try to get staff_id from DB if not in config
+        if user_info["id"] is None:
+            try:
+                staff_df = db_utils.get_staff()
+                match = staff_df[staff_df['name'] == user_info['name']]
+                if not match.empty:
+                    user_info["id"] = int(match.iloc[0]['id'])
+            except Exception:
+                pass
+        st.session_state["user_info"] = user_info
+        
         office_id = user_data.get("office_id")
         if office_id:
             st.session_state["selected_office_id"] = office_id
