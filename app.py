@@ -2142,3 +2142,28 @@ def _render_office_tabs(user, client, current_office_id, offices_df):
 
         # Client Dashboard (利用者ポータル)
 
+
+# --- Main App Entry ---
+print("[app.py] check_password...", flush=True)
+if check_password():
+    user = st.session_state["user_info"]
+    
+    # API Keys: 環境変数から自動読み込み（社員には非表示）
+    openai_key = os.environ.get("OPENAI_API_KEY", "")
+    client = OpenAI(api_key=openai_key) if openai_key else None
+    # Gemini API Key は notebooklm_helper 内で os.environ から自動取得
+    
+    if st.sidebar.button("ログアウト"):
+        st.session_state["logged_in"] = False
+        st.rerun()
+    
+    # Routing based on Role
+    login_role = st.session_state.get("login_role", "staff")
+    if login_role == "client":
+        st.info("利用者ダッシュボードは準備中です。")
+    elif login_role == "hq":
+        hq_dashboard(user, client)
+    elif login_role == "office":
+        office_dashboard(user, client)
+    else:
+        staff_dashboard(user, client)
